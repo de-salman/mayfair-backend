@@ -1,0 +1,634 @@
+{
+	"info": {
+		"_postman_id": "mayfair-one-api-collection",
+		"name": "Mayfair Jets API",
+		"description": "API collection for Mayfair Jets MERN stack application",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login as Superadmin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.token) {",
+									"        pm.environment.set('auth_token', response.token);",
+									"        pm.environment.set('user_id', response.user.id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"super@mayfair.test\",\n    \"password\": \"Password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "login"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "auth", "me"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Create Admin User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data._id) {",
+									"        pm.environment.set('admin_user_id', response.data._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"New Admin User\",\n    \"email\": \"newadmin@mayfair.test\",\n    \"password\": \"Password123\",\n    \"role\": \"admin\",\n    \"allowedModules\": [\"hrms\", \"flightManagement\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Regular User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data._id) {",
+									"        pm.environment.set('regular_user_id', response.data._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"New Regular User\",\n    \"email\": \"newuser@mayfair.test\",\n    \"password\": \"Password123\",\n    \"role\": \"user\",\n    \"allowedModules\": [\"flightManagement\", \"campaigns\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List All Users",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get User by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/users/{{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "users", "{{user_id}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Flights",
+			"item": [
+				{
+					"name": "Upload Flights CSV",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Upload CSV file with flights data. CSV should have columns: flightNo, origin, destination, date, time, aircraft (optional), status (optional)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/flights/upload",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights", "upload"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List All Flights",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/flights",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Flights with Date Range",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/flights?startDate=2024-01-15&endDate=2024-01-20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights"],
+							"query": [
+								{
+									"key": "startDate",
+									"value": "2024-01-15"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-01-20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Flights by Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/flights?status=scheduled",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights"],
+							"query": [
+								{
+									"key": "status",
+									"value": "scheduled"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Today's Flights",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/flights/today",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights", "today"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Flight Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/flights/summary?date=2024-01-15",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights", "summary"],
+							"query": [
+								{
+									"key": "date",
+									"value": "2024-01-15",
+									"description": "Date in YYYY-MM-DD format"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Flight",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data._id) {",
+									"        pm.environment.set('flight_id', response.data._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"flightNo\": \"MF1234\",\n    \"origin\": \"JFK\",\n    \"destination\": \"LAX\",\n    \"date\": \"2024-01-20T00:00:00.000Z\",\n    \"time\": \"08:30\",\n    \"aircraft\": \"Boeing 777\",\n    \"status\": \"scheduled\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/flights",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Flight by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/flights/{{flight_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "flights", "{{flight_id}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Campaigns",
+			"item": [
+				{
+					"name": "Create Campaign",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data._id) {",
+									"        pm.environment.set('campaign_id', response.data._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Spring Promotion 2024\",\n    \"budget\": 50000,\n    \"platform\": \"Facebook, Instagram, Google Ads\",\n    \"performance\": {\n        \"impressions\": 125000,\n        \"clicks\": 3200,\n        \"conversions\": 145,\n        \"ctr\": 2.56\n    },\n    \"status\": \"active\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/campaigns",
+							"host": ["{{base_url}}"],
+							"path": ["api", "campaigns"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List All Campaigns",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/campaigns",
+							"host": ["{{base_url}}"],
+							"path": ["api", "campaigns"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Announcements",
+			"item": [
+				{
+					"name": "Create Announcement",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.success && response.data && response.data._id) {",
+									"        pm.environment.set('announcement_id', response.data._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"New System Update Available\",\n    \"message\": \"We have released new features. Please check the updates section for more details.\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/announcements",
+							"host": ["{{base_url}}"],
+							"path": ["api", "announcements"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List All Announcements",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/announcements",
+							"host": ["{{base_url}}"],
+							"path": ["api", "announcements"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Other Endpoints",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/health",
+							"host": ["{{base_url}}"],
+							"path": ["api", "health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Employees - List All",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/employees",
+							"host": ["{{base_url}}"],
+							"path": ["api", "employees"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Clients - List All",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/clients",
+							"host": ["{{base_url}}"],
+							"path": ["api", "clients"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Tasks - List All",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{auth_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/tasks",
+							"host": ["{{base_url}}"],
+							"path": ["api", "tasks"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		}
+	]
+}
+
