@@ -77,7 +77,9 @@ const createFlight = async (req, res) => {
   
   const flight = await Flight.create(req.body);
   
-  const populatedFlight = await Flight.findById(flight._id).populate('uploadedBy', 'name email');
+  const populatedFlight = await Flight.findById(flight._id)
+    .populate('uploadedBy', 'name email')
+    .populate('returnFlightId', 'flightNo origin destination date time aircraft status');
   
   res.status(201).json({
     success: true,
@@ -101,7 +103,9 @@ const updateFlight = async (req, res) => {
   flight = await Flight.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true
-  }).populate('uploadedBy', 'name email');
+  })
+    .populate('uploadedBy', 'name email')
+    .populate('returnFlightId', 'flightNo origin destination date time aircraft status');
 
   res.status(200).json({
     success: true,
