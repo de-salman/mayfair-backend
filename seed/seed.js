@@ -8,6 +8,7 @@ const Campaign = require('../models/Campaign');
 const Client = require('../models/Client');
 const Task = require('../models/Task');
 const Announcement = require('../models/Announcement');
+const FlightAccounting = require('../modules/accounting/FlightAccounting');
 
 // Clear existing data
 const clearDatabase = async () => {
@@ -19,6 +20,7 @@ const clearDatabase = async () => {
     await Client.deleteMany({});
     await Task.deleteMany({});
     await Announcement.deleteMany({});
+    await FlightAccounting.deleteMany({});
     console.log('✓ Database cleared');
   } catch (error) {
     console.error('Error clearing database:', error);
@@ -32,27 +34,27 @@ const seedUsers = async () => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash('Password123', salt);
 
-    // Superadmin
+    // Superadmin - All modules
     const superadmin = await User.create({
       name: 'Super Admin',
       email: 'super@mayfair.test',
       password: hashedPassword,
       role: 'superadmin',
-      allowedModules: ['hrms', 'flightManagement', 'campaigns', 'clients']
+      allowedModules: ['hrms', 'operations', 'flightManagement', 'campaigns', 'clients', 'accounting']
     });
     console.log('✓ Created superadmin:', superadmin.email);
 
-    // Admin - Operations (Ops)
+    // Admin - Operations (Ops) - Add accounting
     const opsAdmin = await User.create({
       name: 'Ops Admin',
       email: 'ops@mayfair.test',
       password: hashedPassword,
       role: 'admin',
-      allowedModules: ['flightManagement', 'clients']
+      allowedModules: ['flightManagement', 'clients', 'accounting']
     });
     console.log('✓ Created Ops Admin:', opsAdmin.email);
 
-    // Admin - HR
+    // Admin - HR - Exclude accounting
     const hrAdmin = await User.create({
       name: 'HR Admin',
       email: 'hr@mayfair.test',
@@ -62,7 +64,7 @@ const seedUsers = async () => {
     });
     console.log('✓ Created HR Admin:', hrAdmin.email);
 
-    // Admin - Marketing
+    // Admin - Marketing - Exclude accounting
     const marketingAdmin = await User.create({
       name: 'Marketing Admin',
       email: 'marketing@mayfair.test',
@@ -192,7 +194,7 @@ const seedEmployees = async (hrAdmin) => {
   }
 };
 
-// Seed flights (today + next 3 days)
+// Seed flights (today + next 3 days + historical data across multiple months)
 const seedFlights = async (users) => {
   try {
     const today = new Date();
@@ -200,45 +202,398 @@ const seedFlights = async (users) => {
     
     const flights = [];
     const statuses = ['scheduled', 'scheduled', 'delayed', 'scheduled', 'cancelled', 'scheduled', 'in-progress', 'completed'];
-    const origins = ['JFK', 'LAX', 'DXB', 'LHR', 'CDG', 'SIN', 'NRT', 'SYD'];
-    const destinations = ['LAX', 'JFK', 'LHR', 'DXB', 'SIN', 'CDG', 'SYD', 'NRT'];
-    const aircrafts = ['Boeing 777', 'Airbus A380', 'Boeing 787', 'Airbus A350', 'Boeing 737', 'Airbus A320', 'Boeing 747', 'Airbus A330'];
     
-    // Generate flights for today and next 3 days
-    for (let dayOffset = 0; dayOffset < 4; dayOffset++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + dayOffset);
+    // Define round trip routes (outbound and return pairs)
+    const roundTripRoutes = [
+      { outbound: { origin: 'MXP', destination: 'DXB' }, return: { origin: 'DXB', destination: 'MXP' }, aircraft: 'Boeing 777' },
+      { outbound: { origin: 'JFK', destination: 'LAX' }, return: { origin: 'LAX', destination: 'JFK' }, aircraft: 'Boeing 787' },
+      { outbound: { origin: 'LHR', destination: 'DXB' }, return: { origin: 'DXB', destination: 'LHR' }, aircraft: 'Airbus A380' },
+      { outbound: { origin: 'CDG', destination: 'MXP' }, return: { origin: 'MXP', destination: 'CDG' }, aircraft: 'Airbus A320' },
+      { outbound: { origin: 'SIN', destination: 'DXB' }, return: { origin: 'DXB', destination: 'SIN' }, aircraft: 'Boeing 777' },
+      { outbound: { origin: 'NRT', destination: 'DXB' }, return: { origin: 'DXB', destination: 'NRT' }, aircraft: 'Boeing 787' },
+      { outbound: { origin: 'SYD', destination: 'DXB' }, return: { origin: 'DXB', destination: 'SYD' }, aircraft: 'Airbus A350' }
+    ];
+    
+    // Single sector routes (non-round trips)
+    const singleSectorRoutes = [
+      { origin: 'MXP', destination: 'CDG', aircraft: 'Airbus A320' },
+      { origin: 'CDG', destination: 'LHR', aircraft: 'Airbus A320' },
+      { origin: 'LAX', destination: 'SFO', aircraft: 'Boeing 737' }
+    ];
+    
+    // Generate flights for:
+    // 1. Today and next 3 days (current flights)
+    // 2. Past 3 months (historical data for trends)
+    // 3. Future 2 months (upcoming flights)
+    
+    const monthOffsets = [-3, -2, -1, 0, 1, 2]; // 3 months back, current month, 2 months forward
+    
+    for (const monthOffset of monthOffsets) {
+      const monthStart = new Date(today);
+      monthStart.setMonth(today.getMonth() + monthOffset, 1);
+      monthStart.setHours(0, 0, 0, 0);
       
-      // Generate 8-12 flights per day
-      const flightsPerDay = 8 + Math.floor(Math.random() * 5);
+      // Generate flights for each day of the month (sample days)
+      const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+      const daysToGenerate = monthOffset === 0 ? 7 : Math.min(7, daysInMonth); // More days for current month
       
-      for (let i = 0; i < flightsPerDay; i++) {
-        const hour = Math.floor(Math.random() * 24);
-        const minute = Math.floor(Math.random() * 60);
-        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+      for (let day = 0; day < daysToGenerate; day++) {
+        const date = new Date(monthStart);
+        date.setDate(1 + day);
         
-        const flightNoIndex = i % 10;
-        const originIndex = (i + dayOffset) % origins.length;
-        const destIndex = (i + dayOffset + 1) % destinations.length;
+        // Generate 4-6 round trip pairs per day (8-12 flights total)
+        const roundTripsPerDay = 4 + Math.floor(Math.random() * 3);
+        const roundTripPairs = [];
         
-        flights.push({
-          flightNo: `MF${1000 + (dayOffset * 100) + i}`,
-          origin: origins[originIndex],
-          destination: destinations[destIndex],
-          date: new Date(date),
-          time: timeStr,
-          aircraft: aircrafts[i % aircrafts.length],
-          status: statuses[i % statuses.length],
-          uploadedBy: users.opsAdmin._id
+        for (let i = 0; i < roundTripsPerDay; i++) {
+          const routeIndex = (day * roundTripsPerDay + i) % roundTripRoutes.length;
+          const roundTrip = roundTripRoutes[routeIndex];
+          
+          // Outbound flight time (morning/afternoon)
+          const outboundHour = 8 + Math.floor(Math.random() * 8); // 8 AM to 3 PM
+          const outboundMinute = Math.floor(Math.random() * 60);
+          const outboundTime = `${outboundHour.toString().padStart(2, '0')}:${outboundMinute.toString().padStart(2, '0')}`;
+          
+          // Return flight time (evening, same day or next day)
+          const returnDate = new Date(date);
+          const returnHour = 18 + Math.floor(Math.random() * 6); // 6 PM to 11 PM
+          const returnMinute = Math.floor(Math.random() * 60);
+          const returnTime = `${returnHour.toString().padStart(2, '0')}:${returnMinute.toString().padStart(2, '0')}`;
+          
+          // Generate flight numbers
+          const baseFlightNo = 1000 + (monthOffset + 3) * 100 + day * 10 + i;
+          const outboundFlightNo = `MF${baseFlightNo}`;
+          const returnFlightNo = `MF${baseFlightNo + 1}`;
+          
+          // Create outbound flight
+          const outboundFlight = {
+            flightNo: outboundFlightNo,
+            origin: roundTrip.outbound.origin,
+            destination: roundTrip.outbound.destination,
+            date: new Date(date),
+            time: outboundTime,
+            aircraft: roundTrip.aircraft,
+            status: statuses[i % statuses.length],
+            uploadedBy: users.opsAdmin._id,
+            isRoundTrip: true
+          };
+          
+          // Create return flight (will be linked after insertion)
+          const returnFlight = {
+            flightNo: returnFlightNo,
+            origin: roundTrip.return.origin,
+            destination: roundTrip.return.destination,
+            date: returnDate,
+            time: returnTime,
+            aircraft: roundTrip.aircraft,
+            status: statuses[i % statuses.length],
+            uploadedBy: users.opsAdmin._id,
+            isRoundTrip: true
+          };
+          
+          roundTripPairs.push({ outbound: outboundFlight, return: returnFlight });
+        }
+        
+        // Add some single-sector flights (non-round trips)
+        const singleSectorCount = Math.floor(Math.random() * 2); // 0-1 single sector flights per day
+        for (let j = 0; j < singleSectorCount; j++) {
+          const singleRouteIndex = (day * singleSectorCount + j) % singleSectorRoutes.length;
+          const singleRoute = singleSectorRoutes[singleRouteIndex];
+          
+          const hour = 10 + Math.floor(Math.random() * 10);
+          const minute = Math.floor(Math.random() * 60);
+          const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+          
+          flights.push({
+            flightNo: `MF${2000 + (monthOffset + 3) * 100 + day * 10 + j}`,
+            origin: singleRoute.origin,
+            destination: singleRoute.destination,
+            date: new Date(date),
+            time: timeStr,
+            aircraft: singleRoute.aircraft,
+            status: statuses[j % statuses.length],
+            uploadedBy: users.opsAdmin._id,
+            isRoundTrip: false
+          });
+        }
+        
+        // Add all round trip flights to the array
+        roundTripPairs.forEach(pair => {
+          flights.push(pair.outbound);
+          flights.push(pair.return);
         });
       }
     }
     
+    // Insert all flights first
     const createdFlights = await Flight.insertMany(flights);
-    console.log(`✓ Created ${createdFlights.length} flights (today + next 3 days)`);
-    return createdFlights;
+    console.log(`✓ Created ${createdFlights.length} flights (across 6 months)`);
+    
+    // Now link round trip pairs (outbound → return)
+    let roundTripsLinked = 0;
+    for (let i = 0; i < createdFlights.length - 1; i++) {
+      const flight = createdFlights[i];
+      if (flight.isRoundTrip && !flight.returnFlightId) {
+        // Find the matching return flight (same route, same date, different direction)
+        const returnFlight = createdFlights.find(f => 
+          f.isRoundTrip &&
+          f.origin === flight.destination &&
+          f.destination === flight.origin &&
+          f.date.getTime() === flight.date.getTime() &&
+          f._id.toString() !== flight._id.toString() &&
+          !f.returnFlightId
+        );
+        
+        if (returnFlight) {
+          // Link outbound to return
+          await Flight.findByIdAndUpdate(flight._id, { returnFlightId: returnFlight._id });
+          // Update the in-memory object as well
+          flight.returnFlightId = returnFlight._id;
+          roundTripsLinked++;
+        }
+      }
+    }
+    
+    // Refresh flights to get updated returnFlightId
+    const refreshedFlights = await Flight.find({})
+      .populate('returnFlightId', 'flightNo origin destination date time aircraft status')
+      .sort({ date: 1, time: 1 });
+    
+    console.log(`✓ Linked ${roundTripsLinked} round trip pairs`);
+    console.log(`✓ Verified: ${refreshedFlights.filter(f => f.returnFlightId).length} flights have returnFlightId`);
+    return refreshedFlights;
   } catch (error) {
     console.error('Error seeding flights:', error);
+    throw error;
+  }
+};
+
+// Seed flight accounting records with multi-sector support and month-based booking loads
+const seedFlightAccounting = async (flights, users) => {
+  try {
+    const flightAccountingRecords = [];
+    
+    // Aircraft capacity mapping
+    const aircraftCapacities = {
+      'Boeing 777': 396,
+      'Airbus A380': 853,
+      'Boeing 787': 242,
+      'Airbus A350': 366,
+      'Boeing 737': 189,
+      'Airbus A320': 180,
+      'Boeing 747': 467,
+      'Airbus A330': 335
+    };
+    
+    // Sector-specific taxes (different taxes per sector)
+    const sectorTaxesMap = {
+      'MXP-DXB': 34,  // MXP to DXB: 34 EUR
+      'DXB-MXP': 25,  // DXB to MXP: 25 EUR (round trip return)
+      'MXP-CDG': 28,  // MXP to CDG: 28 EUR
+      'CDG-MXP': 28,  // CDG to MXP: 28 EUR
+      'LHR-DXB': 45,  // LHR to DXB: 45 GBP
+      'DXB-LHR': 45,  // DXB to LHR: 45 GBP
+      'JFK-LAX': 75,  // JFK to LAX: 75 USD
+      'LAX-JFK': 75,  // LAX to JFK: 75 USD
+      'SIN-DXB': 38,  // SIN to DXB: 38 SGD
+      'DXB-SIN': 38,  // DXB to SIN: 38 SGD
+      'NRT-DXB': 42,  // NRT to DXB: 42 JPY (converted)
+      'DXB-NRT': 42,  // DXB to NRT: 42 JPY (converted)
+      'SYD-DXB': 55,  // SYD to DXB: 55 AUD
+      'DXB-SYD': 55   // DXB to SYD: 55 AUD
+    };
+    
+    // Month-based booking load patterns (simulating seasonal variations)
+    // December: 90%, January: 75%, February: 50%, March: 65%, April: 70%, May: 80%
+    const getMonthBasedBookingLoad = (date) => {
+      const month = date.getMonth(); // 0-11
+      const baseLoads = {
+        0: 0.75,  // January: 75%
+        1: 0.50,  // February: 50%
+        2: 0.65,  // March: 65%
+        3: 0.70,  // April: 70%
+        4: 0.80,  // May: 80%
+        5: 0.85,  // June: 85%
+        6: 0.90,  // July: 90%
+        7: 0.88,  // August: 88%
+        8: 0.75,  // September: 75%
+        9: 0.70,  // October: 70%
+        10: 0.65, // November: 65%
+        11: 0.90  // December: 90%
+      };
+      const baseLoad = baseLoads[month] || 0.75;
+      // Add some variation (±5%)
+      return Math.max(0.5, Math.min(0.95, baseLoad + (Math.random() * 0.1 - 0.05)));
+    };
+    
+    // Determine currency based on route
+    const getCurrencyForRoute = (origin, destination) => {
+      if (origin === 'MXP' || origin === 'CDG' || destination === 'MXP' || destination === 'CDG') {
+        return 'EUR';
+      }
+      if (origin === 'LHR' || destination === 'LHR') {
+        return 'GBP';
+      }
+      if (origin === 'JFK' || origin === 'LAX' || destination === 'JFK' || destination === 'LAX') {
+        return 'USD';
+      }
+      if (origin === 'SIN' || destination === 'SIN') {
+        return 'SGD';
+      }
+      if (origin === 'NRT' || destination === 'NRT') {
+        return 'USD'; // Using USD for JPY conversion
+      }
+      if (origin === 'SYD' || destination === 'SYD') {
+        return 'AUD';
+      }
+      return 'USD'; // Default
+    };
+    
+    // Generate realistic base fare based on route and currency
+    const getBaseFareForRoute = (origin, destination, currency) => {
+      const routeKey = `${origin}-${destination}`;
+      
+      // MXP-DXB routes: 190-350 EUR (as per requirements)
+      if (routeKey === 'MXP-DXB' || routeKey === 'DXB-MXP') {
+        return 190 + (Math.random() * 160); // 190-350 EUR
+      }
+      
+      // European short-haul routes: 150-300 EUR
+      if ((origin === 'MXP' || origin === 'CDG' || destination === 'MXP' || destination === 'CDG') && 
+          currency === 'EUR') {
+        return 150 + (Math.random() * 150);
+      }
+      
+      // Long-haul routes: higher fares
+      if (currency === 'USD') {
+        return 500 + (Math.random() * 2000); // 500-2500 USD
+      }
+      if (currency === 'GBP') {
+        return 400 + (Math.random() * 1500); // 400-1900 GBP
+      }
+      if (currency === 'EUR') {
+        return 300 + (Math.random() * 1200); // 300-1500 EUR
+      }
+      if (currency === 'AUD') {
+        return 600 + (Math.random() * 1800); // 600-2400 AUD
+      }
+      if (currency === 'SGD') {
+        return 500 + (Math.random() * 1500); // 500-2000 SGD
+      }
+      
+      return 500 + (Math.random() * 2000); // Default
+    };
+    
+    // Create accounting records for ALL flights (100% coverage)
+    // Handle round trips separately - each flight (outbound and return) gets its own accounting record
+    // The controller will combine them when displaying
+    for (let i = 0; i < flights.length; i++) {
+      const flight = flights[i];
+      const aircraft = flight.aircraft || 'Boeing 737';
+      const capacity = aircraftCapacities[aircraft] || 200;
+      
+      // Determine if this is part of a round trip
+      const isRoundTrip = flight.isRoundTrip || false;
+      const routeKey = `${flight.origin}-${flight.destination}`;
+      
+      // Check if this flight is the return flight of a round trip
+      // (i.e., if another flight has this flight as its returnFlightId)
+      const isReturnFlight = isRoundTrip && flights.some(f => {
+        const fReturnId = f.returnFlightId?._id || f.returnFlightId;
+        return fReturnId && fReturnId.toString() === flight._id.toString();
+      });
+      
+      // Get month-based booking load (simulates seasonal variations)
+      // For round trips, use same booking load for both outbound and return
+      const bookingLoad = getMonthBasedBookingLoad(flight.date);
+      
+      // Determine currency based on route
+      const currency = getCurrencyForRoute(flight.origin, flight.destination);
+      
+      // Get base fare based on route and currency
+      // For round trips, outbound and return may have different fares
+      const baseFare = getBaseFareForRoute(flight.origin, flight.destination, currency);
+      
+      // Get sector-specific taxes (different for outbound vs return in round trips)
+      // Example: MXP-DXB: 34 EUR, DXB-MXP: 25 EUR
+      const sectorTaxes = sectorTaxesMap[routeKey] || (30 + Math.random() * 40); // Default 30-70
+      
+      // Generate fuel surcharge (varies by route length)
+      const isLongHaul = ['JFK', 'LAX', 'SYD', 'NRT', 'SIN'].includes(flight.origin) || 
+                         ['JFK', 'LAX', 'SYD', 'NRT', 'SIN'].includes(flight.destination);
+      const fuelSurcharge = isLongHaul 
+        ? (100 + Math.random() * 200)  // Long-haul: 100-300
+        : (50 + Math.random() * 100);    // Short-haul: 50-150
+      
+      // Generate service charges (50 to 150)
+      const serviceCharges = 50 + (Math.random() * 100);
+      
+      // Calculate budget per flight (baseFare * capacity * bookingLoad * 0.4 to 0.6)
+      // Budget accounts for expected revenue
+      // For round trips, each sector (outbound/return) has its own budget
+      const expectedRevenue = baseFare * capacity * bookingLoad;
+      const budgetPerFlight = expectedRevenue * (0.4 + Math.random() * 0.2);
+      
+      // Generate operating costs (budget * 0.25 to 0.35)
+      const operatingCosts = budgetPerFlight * (0.25 + Math.random() * 0.1);
+      
+      // Generate crew costs (budget * 0.15 to 0.25)
+      const crewCosts = budgetPerFlight * (0.15 + Math.random() * 0.1);
+      
+      // Generate fuel costs (budget * 0.25 to 0.35)
+      const fuelCosts = budgetPerFlight * (0.25 + Math.random() * 0.1);
+      
+      // Generate maintenance costs (budget * 0.1 to 0.15)
+      const maintenanceCosts = budgetPerFlight * (0.1 + Math.random() * 0.05);
+      
+      // Build notes with round trip information
+      let notes = `Route: ${routeKey}, Month: ${flight.date.toLocaleString('default', { month: 'long' })}`;
+      if (isRoundTrip) {
+        if (isReturnFlight) {
+          notes += ` (Return sector of round trip)`;
+        } else {
+          notes += ` (Outbound sector of round trip)`;
+        }
+      }
+      
+      flightAccountingRecords.push({
+        flightId: flight._id,
+        capacity: capacity,
+        bookingLoad: Math.round(bookingLoad * 1000) / 1000, // Round to 3 decimals
+        baseFare: Math.round(baseFare * 100) / 100,
+        sectorTaxes: Math.round(sectorTaxes * 100) / 100, // Sector-specific tax
+        fuelSurcharge: Math.round(fuelSurcharge * 100) / 100,
+        serviceCharges: Math.round(serviceCharges * 100) / 100,
+        budgetPerFlight: Math.round(budgetPerFlight * 100) / 100,
+        operatingCosts: Math.round(operatingCosts * 100) / 100,
+        crewCosts: Math.round(crewCosts * 100) / 100,
+        fuelCosts: Math.round(fuelCosts * 100) / 100,
+        maintenanceCosts: Math.round(maintenanceCosts * 100) / 100,
+        currency: currency,
+        notes: notes,
+        createdBy: users.opsAdmin._id,
+        updatedBy: users.opsAdmin._id
+      });
+    }
+    
+    const createdAccounting = await FlightAccounting.insertMany(flightAccountingRecords);
+    
+    // Count round trip accounting records
+    const roundTripCount = flightAccountingRecords.filter((_, idx) => {
+      const flight = flights[idx];
+      return flight && flight.isRoundTrip;
+    }).length;
+    
+    console.log(`✓ Created ${createdAccounting.length} flight accounting records (100% coverage)`);
+    console.log(`  - ${roundTripCount} round trip sectors (outbound + return)`);
+    console.log(`  - Multi-sector routes with sector-specific taxes (MXP-DXB: 34 EUR, DXB-MXP: 25 EUR)`);
+    console.log(`  - Month-based booking loads (seasonal variations)`);
+    console.log(`  - Route-specific currencies (EUR, USD, GBP, AUD, SGD)`);
+    console.log(`  - MXP-DXB fare range: 190-350 EUR`);
+    console.log(`  - Round trips will be combined into single rows in the Accounting page`);
+    return createdAccounting;
+  } catch (error) {
+    console.error('Error seeding flight accounting:', error);
     throw error;
   }
 };
@@ -541,6 +896,7 @@ const seedDatabase = async () => {
     const users = await seedUsers();
     const employees = await seedEmployees(users.hrAdmin);
     const flights = await seedFlights(users);
+    const flightAccounting = await seedFlightAccounting(flights, users);
     const campaigns = await seedCampaigns(users.marketingAdmin);
     const clients = await seedClients();
     const tasks = await seedTasks(users);

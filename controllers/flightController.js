@@ -33,6 +33,7 @@ const getFlights = async (req, res) => {
     
     const flights = await Flight.find(query)
       .populate('uploadedBy', 'name email')
+      .populate('returnFlightId', 'flightNo origin destination date time aircraft status')
       .sort({ date: 1, time: 1 });
     
     res.status(200).json({
@@ -255,6 +256,7 @@ const getTodayFlights = async (req, res) => {
       }
     })
       .populate('uploadedBy', 'name email')
+      .populate('returnFlightId', 'flightNo origin destination date time aircraft status')
       .sort({ time: 1 }); // Sort by time ascending
 
     res.status(200).json({
